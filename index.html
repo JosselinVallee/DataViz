@@ -7,26 +7,84 @@
 
 path {
   fill: none;
-  stroke: #333;
+  stroke: #A9A9A9;
   stroke-width: .5px;
 }
 
-.land-boundary {
-  stroke-width: 1px;
-}
-
-.county-boundary {
-  stroke: #ddd;
+.overlay {
+  fill: none;
+  pointer-events: all;
+  stroke: #A9A9A9;
+  stroke-width: 2px;
 }
 
 .site {
-	stroke-width: .5px;
+	stroke-width: .05px;
   stroke: #333;
-  fill: #9cf;
+  fill: #af111c;
 }
+body {
+      font-family:"avenir next", Arial, sans-serif;
+      font-size: 12px;
+      color: #696969;
+    }
 
+    #play-button {
+      position: absolute;
+      top: 140px;
+      left: 50px;
+      background: #f08080;
+      padding-right: 26px;
+      border-radius: 3px;
+      border: none;
+      color: white;
+      margin: 0;
+      padding: 0 12px;
+      width: 60px;
+      cursor: pointer;
+      height: 30px;
+    }
+
+    #play-button:hover {
+      background-color: #696969;
+    }    
+    
+    .ticks {
+      font-size: 10px;
+    }
+
+    .track,
+    .track-inset,
+    .track-overlay {
+      stroke-linecap: round;
+    }
+
+    .track {
+      stroke: #000;
+      stroke-opacity: 0.3;
+      stroke-width: 10px;
+    }
+
+    .track-inset {
+      stroke: #dcdcdc;
+      stroke-width: 8px;
+    }
+
+    .track-overlay {
+      pointer-events: stroke;
+      stroke-width: 50px;
+      stroke: transparent;
+      cursor: crosshair;
+    }
+
+    .handle {
+      fill: #fff;
+      stroke: #000;
+      stroke-opacity: 0.5;
+      stroke-width: 1.25px;
+    }
 #slider3 {
-  margin: 20px 0 10px 20px;
+  margin: 100px 0 100px 20px;
   width: 900px;
 }
 
@@ -46,60 +104,71 @@ path {
 
 <script>
 
-var width = 960,
-    height = 600;
+var width = 1000, 
+    mapRatio = .5, 
+    mapRatioAdjuster = 50,
+    height = width * mapRatio,
+    nyc_center = [-73.893002, 40.705019];
 
-var mapPath = "/cmdoptesc/raw/4714c586f69425043ae3/us.json";
 
-var projection = d3.geo.albersUsa()
-    .scale(1280)
-    .translate([width / 2, height / 2]);
+  var projection = d3.geo.mercator().center(nyc_center).translate([width / 2, height / 2]).scale(width * [mapRatio + mapRatioAdjuster]);
 
-var path = d3.geo.path()
-    .projection(projection);
+  var zoom = zoom = d3.behavior.zoom().scaleExtent([1, 7]).on("zoom", zoomed);
 
-var svg = d3.select("body").append("svg")
+  var svg = d3.select("body").append("svg")
     .attr("width", width)
     .attr("height", height);
 
-d3.json("https://d3js.org/us-10m.v1.json", function(error, us) {
-  if (error) return console.error(error);
+  var features = svg.append("g");
 
-  svg.append("path")
-      .datum(topojson.feature(us, us.objects.land))
-      .attr("d", path)
-      .attr("class", "land-boundary");
+  svg.append("rect")
+    .attr("class", "overlay")
+    .attr("width", width)
+    .attr("height", height)
+    .call(zoom);
+         
+  
+  
+  d3.json("police_precincts.geojson", function(error, NYC_MapInfo) {
 
-  svg.append("path")
-      .datum(topojson.mesh(us, us.objects.counties, function(a, b) { return a !== b && (a.id / 1000 | 0) === (b.id / 1000 | 0); }))
-      .attr("d", path)
-      .attr("class", "county-boundary");
+    // after loading geojson, use d3.geo.centroid to find out 
+    // where you need to center your map
+    var center = d3.geo.centroid(NYC_MapInfo);
+    projection.center(center);
 
-  svg.append("path")
-      .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
-      .attr("d", path)
-      .attr("class", "state-boundary");
+    // now you can create new path function with 
+    // correctly centered projection
+    var path = d3.geo.path().projection(projection);
 
+    // and finally draw the actual polygons
+    features.selectAll("path")
+      .data(NYC_MapInfo.features)
+      .enter()
+      .append("path")
+      .attr("d", path);
 
-  d3.tsv("rest_777.txt")
+    d3.csv("Data/felonies.csv")
     .row(function(d) {
       return {
-        permalink: d.permalink,
-        lat: parseFloat(d.lat),
-        lng: parseFloat(d.long),
-        city: d.city,
-        created_at: moment(d.created_at,"YYYY-MM-DD HH:mm:ss").unix()
+        permalink: d.CMPLNT_NUM,
+        lat: parseFloat(d.Latitude),
+        lng: parseFloat(d.Longitude),
+        description : d.OFNS_DESC,
+        created_at: moment(d.CMPLNT_FR_DT + ' ' + d.CMPLNT_FR_TM, "MM-DD-YYYY HH:mm:ss").unix()
       };
     })
     .get(function(err, rows) {
-    	if (err) return console.error(err);
+      if (err) return console.error(err);
 
       window.site_data = rows;
     });
-});
+  });
+
+
+
 
 var displaySites = function(data) {
-  var sites = svg.selectAll(".site")
+  var sites = features.selectAll(".site")
       .data(data, function(d) {
         return d.permalink;
       });
@@ -112,9 +181,9 @@ var displaySites = function(data) {
       .attr("cy", function(d) {
         return projection([d.lng, d.lat])[1];
       })
-      .attr("r", 1)
-      .transition().duration(400)
-        .attr("r", 5);
+      .attr("r", 0.2)
+      .transition().duration(500)
+        .attr("r", 1);
 
   sites.exit()
     .transition().duration(200)
@@ -122,8 +191,9 @@ var displaySites = function(data) {
       .remove();
 };
 
-var minDateUnix = moment('2014-07-01', "YYYY MM DD").unix();
-var maxDateUnix = moment('2015-07-21', "YYYY MM DD").unix();
+
+var minDateUnix = moment('2018-01-01', "YYYY MM DD").unix();
+var maxDateUnix = moment('2018-12-30', "YYYY MM DD").unix();
 var secondsInDay = 60 * 60 * 24;
 
 d3.select('#slider3').call(d3.slider()
@@ -137,6 +207,12 @@ d3.select('#slider3').call(d3.slider()
     displaySites(newData);
   })
 );
+
+function zoomed() {
+  features.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
+}
+
+
 
 </script>
 </body>
