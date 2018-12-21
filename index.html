@@ -147,7 +147,7 @@ var width = 1000,
       .append("path")
       .attr("d", path);
 
-    d3.csv("Data/felonies.csv")
+    d3.csv("felonies.csv")
     .row(function(d) {
       return {
         permalink: d.CMPLNT_NUM,
